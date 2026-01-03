@@ -3,463 +3,179 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Galactic Defender: Stats & Pause</title>
+    <title>Galactic Defender: Visual Upgrade</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <style> 
         body { margin: 0; padding: 0; background: #000; overflow: hidden; user-select: none; -webkit-user-select: none; font-family: Arial, sans-serif; } 
-        
-        /* Màn hình Start */
-        #start-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center;
-            z-index: 999; cursor: pointer; color: #0f0; flex-direction: column;
-        }
-
-        /* Menu Pause */
-        #pause-menu {
-            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.8); z-index: 1000;
-            flex-direction: column; align-items: center; justify-content: center;
-        }
-        .btn {
-            background: #fff; color: #000; padding: 15px 30px; margin: 10px;
-            font-size: 20px; font-weight: bold; border: 2px solid #0f0; cursor: pointer;
-            width: 200px; text-align: center; border-radius: 10px;
-        }
+        #start-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 999; cursor: pointer; color: #0f0; flex-direction: column; }
+        #pause-menu { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
+        .btn { background: #fff; color: #000; padding: 15px 30px; margin: 10px; font-size: 20px; font-weight: bold; border: 2px solid #0f0; cursor: pointer; width: 200px; text-align: center; border-radius: 10px; }
         .btn:hover { background: #0f0; color: #fff; }
         .btn-quit { border-color: #f00; }
         .btn-quit:hover { background: #f00; }
-
-        /* HUD Stats */
-        #hud {
-            position: absolute; top: 10px; left: 10px; pointer-events: none;
-            color: white; font-weight: bold; text-shadow: 1px 1px 0 #000;
-        }
-        .bar-container {
-            width: 150px; height: 15px; background: #333; margin-bottom: 5px; border: 1px solid #fff; position: relative;
-        }
+        #hud { position: absolute; top: 10px; left: 10px; pointer-events: none; color: white; font-weight: bold; text-shadow: 1px 1px 0 #000; }
+        .bar-container { width: 150px; height: 15px; background: #333; margin-bottom: 5px; border: 1px solid #fff; position: relative; }
         .bar-fill { height: 100%; transition: width 0.1s; }
         #hp-bar { background: #f00; width: 100%; }
         #mana-bar { background: #00f; width: 100%; }
-        
-        /* Nút Pause góc phải */
-        #btn-pause {
-            position: absolute; top: 10px; right: 10px; width: 40px; height: 40px;
-            background: #fff; border-radius: 5px; cursor: pointer;
-            display: flex; justify-content: center; align-items: center; font-size: 20px;
-            z-index: 500; border: 2px solid #000;
-        }
+        #btn-pause { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; background: #fff; border-radius: 5px; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 20px; z-index: 500; border: 2px solid #000; }
     </style>
 </head>
 <body>
 
-<div id="start-overlay" onclick="startGame()">
-    <div style="font-size: 40px; font-weight: bold;">TAP TO START</div>
-    <div style="margin-top: 10px;">(Enable Audio System)</div>
-</div>
-
+<div id="start-overlay" onclick="startGame()"><div style="font-size: 40px; font-weight: bold;">TAP TO START</div><div style="margin-top: 10px;">(Enable Audio System)</div></div>
 <div id="btn-pause" onclick="togglePause()">II</div>
-
 <div id="hud">
-    <div>HP <span id="hp-text">100</span></div>
-    <div class="bar-container"><div id="hp-bar" class="bar-fill"></div></div>
-    <div>MANA <span id="mana-text">100</span></div>
-    <div class="bar-container"><div id="mana-bar" class="bar-fill"></div></div>
+    <div>HP <span id="hp-text">100</span></div><div class="bar-container"><div id="hp-bar" class="bar-fill"></div></div>
+    <div>MANA <span id="mana-text">100</span></div><div class="bar-container"><div id="mana-bar" class="bar-fill"></div></div>
     <div id="score-display" style="margin-top: 10px; font-size: 20px; color: #ff0;">SCORE: 0</div>
 </div>
-
 <div id="pause-menu">
     <div style="color: white; font-size: 40px; margin-bottom: 30px; font-weight: bold;">PAUSED</div>
-    <div class="btn" onclick="togglePause()">RESUME</div>
-    <div class="btn" onclick="restartCurrentWave()">RESTART WAVE</div>
-    <div class="btn" onclick="location.reload()">RESTART GAME</div>
-    <div class="btn btn-quit" onclick="window.close()">QUIT</div>
+    <div class="btn" onclick="togglePause()">RESUME</div><div class="btn" onclick="restartCurrentWave()">RESTART WAVE</div><div class="btn" onclick="location.reload()">RESTART GAME</div><div class="btn btn-quit" onclick="window.close()">QUIT</div>
 </div>
 
 <script>
 // --- AUDIO SYSTEM ---
 const AudioContext = window.AudioContext || window.webkitAudioContext;
-let audioCtx;
-let gameStarted = false;
-
-function initAudio() {
-    if (!audioCtx) audioCtx = new AudioContext();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-}
-
+let audioCtx; let gameStarted = false;
+function initAudio() { if (!audioCtx) audioCtx = new AudioContext(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
 function sfx(type) {
     if (!audioCtx || audioCtx.state !== 'running') return;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    const now = audioCtx.currentTime;
-
-    if (type === 'shoot') {
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
-        gain.gain.setValueAtTime(0.05, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-    } else if (type === 'hit') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(150, now);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.05);
-    } else if (type === 'explode') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, now);
-        osc.frequency.exponentialRampToValueAtTime(10, now + 0.4);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-    } else if (type === 'noshot') { // Hết mana
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(100, now);
-        gain.gain.setValueAtTime(0.05, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.1);
-    }
-    
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(now);
-    osc.stop(now + 0.5);
+    const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); const now = audioCtx.currentTime;
+    if (type === 'shoot') { osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(50, now + 0.1); gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    } else if (type === 'hit') { osc.type = 'triangle'; osc.frequency.setValueAtTime(150, now); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.05);
+    } else if (type === 'explode') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, now); osc.frequency.exponentialRampToValueAtTime(10, now + 0.4); gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    } else if (type === 'noshot') { osc.type = 'square'; osc.frequency.setValueAtTime(100, now); gain.gain.setValueAtTime(0.05, now); gain.gain.linearRampToValueAtTime(0, now + 0.1); }
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now + 0.5);
 }
-
-function startGame() {
-    initAudio();
-    document.getElementById('start-overlay').style.display = 'none';
-    gameStarted = true;
-}
+function startGame() { initAudio(); document.getElementById('start-overlay').style.display = 'none'; gameStarted = true; }
 
 // --- GAME LOGIC ---
-const config = {
-    type: Phaser.AUTO,
-    width: window.innerWidth,
-    height: window.innerHeight,
-    backgroundColor: '#000000',
-    physics: { default: 'arcade', arcade: { debug: false, gravity: { y: 0 } } },
-    scene: { preload: preload, create: create, update: update },
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }
-};
-
+const config = { type: Phaser.AUTO, width: window.innerWidth, height: window.innerHeight, backgroundColor: '#000000', physics: { default: 'arcade', arcade: { debug: false, gravity: { y: 0 } } }, scene: { preload: preload, create: create, update: update }, scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH } };
 let player, bullets, enemies, enemyBullets, stars;
-let currentWave = 1, isWaveActive = false;
-let waveTimer, spawnTimer;
-let waveTimeRemaining = 30;
-let lastFired = 0;
-let isPaused = false;
-let gameScene;
-
-// STATS
-let score = 0;
-let hp = 100;
-let mana = 100;
-let isInvincible = false;
+let currentWave = 1, isWaveActive = false, waveTimer, spawnTimer, waveTimeRemaining = 30;
+let lastFired = 0, isPaused = false, gameScene;
+let score = 0, hp = 100, mana = 100, isInvincible = false;
 
 const game = new Phaser.Game(config);
 
-function preload() { /* Code vẽ hình */ }
+function preload() {
+    // --- VẼ TEXTURE TRỰC TIẾP BẰNG CODE ---
+    // 1. Người chơi: Phi thuyền F-22 Xám (Dựa trên)
+    let g = this.make.graphics({x:0, y:0, add:false});
+    g.fillStyle(0x808080); // Màu xám
+    g.beginPath(); g.moveTo(0, -30); g.lineTo(20, 10); g.lineTo(30, 30); g.lineTo(10, 25); g.lineTo(0, 30); g.lineTo(-10, 25); g.lineTo(-30, 30); g.lineTo(-20, 10); g.closePath(); g.fill();
+    g.fillStyle(0x505050); // Buồng lái tối màu
+    g.beginPath(); g.moveTo(0, -20); g.lineTo(5, -5); g.lineTo(-5, -5); g.closePath(); g.fill();
+    g.generateTexture('playerShip', 60, 60);
+
+    // 2. Quái thường: Thiên thạch cháy (Dựa trên)
+    g.clear(); g.fillStyle(0x8B4513); // Đá nâu
+    g.beginPath(); g.moveTo(0, -20); g.lineTo(18, -10); g.lineTo(20, 10); g.lineTo(5, 20); g.lineTo(-15, 15); g.lineTo(-20, -5); g.closePath(); g.fill();
+    g.fillStyle(0xFF4500, 0.7); // Lửa cam
+    g.beginPath(); g.moveTo(-10, -25); g.lineTo(10, -25); g.lineTo(0, -35); g.closePath(); g.fill();
+    g.generateTexture('meteor', 40, 55);
+
+    // 3. Mini-boss: UFO Xanh (Dựa trên)
+    g.clear(); g.fillStyle(0xC0C0C0); // Đĩa bạc
+    g.fillCircle(0, 0, 30);
+    g.fillStyle(0x00FFFF); // Đèn xanh ngọc
+    g.fillCircle(0, 0, 20);
+    g.fillStyle(0x0000FF); // Đèn xanh dương trung tâm
+    g.fillCircle(0, 0, 10);
+    g.generateTexture('ufoBlue', 60, 60);
+
+    // 4. Boss: UFO Đỏ (Dựa trên)
+    g.clear(); g.fillStyle(0x8B0000); // Đĩa đỏ đậm
+    g.fillCircle(0, 0, 50);
+    g.fillStyle(0xFF0000); // Đèn đỏ rực
+    g.fillCircle(0, 0, 35);
+    g.fillStyle(0xFF4500); // Đèn cam trung tâm
+    g.fillCircle(0, 0, 20);
+    g.generateTexture('ufoRed', 100, 100);
+
+    // Đạn và Hạt nổ
+    g.clear(); g.fillStyle(0xffff00); g.fillCircle(5,5,5); g.generateTexture('bullet', 10, 10);
+    g.clear(); g.fillStyle(0xffaa00); g.fillCircle(4,4,4); g.generateTexture('enemyBullet', 8, 8);
+    g.clear(); g.fillStyle(0xff0000); g.fillCircle(8,8,8); g.generateTexture('bossBullet', 16, 16);
+}
 
 function create() {
     gameScene = this;
+    stars = []; for(let i=0; i<100; i++) { let star = this.add.circle(Phaser.Math.Between(0, config.width), Phaser.Math.Between(0, config.height), Phaser.Math.Between(1, 3), 0xffffff); star.speed = Phaser.Math.Between(1, 5); stars.push(star); }
+    bullets = this.physics.add.group(); enemyBullets = this.physics.add.group(); enemies = this.physics.add.group();
+    
+    // Sử dụng Texture 'playerShip' thay cho tam giác
+    player = this.physics.add.sprite(config.width/2, config.height-100, 'playerShip');
+    player.setCollideWorldBounds(true); player.setImmovable(true); player.body.setSize(30, 40); player.body.setOffset(15, 10);
 
-    // Background
-    stars = [];
-    for(let i=0; i<100; i++) {
-        let star = this.add.circle(Phaser.Math.Between(0, config.width), Phaser.Math.Between(0, config.height), Phaser.Math.Between(1, 3), 0xffffff);
-        star.speed = Phaser.Math.Between(1, 5);
-        stars.push(star);
-    }
-
-    // Groups
-    bullets = this.physics.add.group();
-    enemyBullets = this.physics.add.group();
-    enemies = this.physics.add.group();
-
-    // Player
-    player = this.add.triangle(config.width/2, config.height-100, 0, -20, -15, 15, 15, 15, 0x00ff00);
-    this.physics.add.existing(player);
-    player.body.setCollideWorldBounds(true);
-    player.body.setImmovable(true);
-    player.body.setSize(20, 20);
-
-    // Wave Text
     this.waveTextObj = this.add.text(config.width/2, config.height/2 - 50, '', { fontSize: '40px', fill: '#ffff00', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(200);
-
-    // Inputs
-    this.input.on('pointermove', (pointer) => {
-        if(gameStarted && !isPaused && player.active) player.x = pointer.x;
-    });
-
-    // Collisions
-    this.physics.add.overlap(bullets, enemies, hitEnemy, null, this);
-    this.physics.add.overlap(player, enemies, playerHitMob, null, this);
-    this.physics.add.overlap(player, enemyBullets, playerHitBullet, null, this);
+    this.input.on('pointermove', (pointer) => { if(gameStarted && !isPaused && player.active) player.x = pointer.x; });
+    this.physics.add.overlap(bullets, enemies, hitEnemy, null, this); this.physics.add.overlap(player, enemies, playerHitMob, null, this); this.physics.add.overlap(player, enemyBullets, playerHitBullet, null, this);
 }
 
 function update(time, delta) {
     if (!gameStarted || isPaused) return;
-
-    // Starfield
-    stars.forEach(star => {
-        star.y += star.speed;
-        if (star.y > config.height) { star.y = 0; star.x = Phaser.Math.Between(0, config.width); }
-    });
-
-    if (!player.active) return;
-    if (!isWaveActive && currentWave === 1 && time > 1000 && !spawnTimer) startWave(this, 1);
-
-    // MANA REGEN (Khi không bắn hoặc thả chuột)
+    stars.forEach(star => { star.y += star.speed; if (star.y > config.height) { star.y = 0; star.x = Phaser.Math.Between(0, config.width); } });
+    if (!player.active) return; if (!isWaveActive && currentWave === 1 && time > 1000 && !spawnTimer) startWave(this, 1);
     let isShooting = this.input.activePointer.isDown;
-    if (!isShooting && mana < 100) {
-        mana += 0.5; // Hồi mana nhanh
-        updateHUD();
-    }
-
-    // SHOOTING
-    if (isShooting && time > lastFired && isWaveActive) {
-        if (mana >= 1) {
-            fireBullet(this);
-            mana -= 1; // Tốn 1 mana
-            updateHUD();
-            lastFired = time + 150; // Tốc độ bắn nhanh hơn tí để sướng tay
-        } else {
-            // Hết mana
-            if (time > lastFired + 500) { sfx('noshot'); lastFired = time + 500; }
-        }
-    }
-
-    // ROTATE MINI-BOSS
+    if (!isShooting && mana < 100) { mana += 0.5; updateHUD(); }
+    if (isShooting && time > lastFired && isWaveActive) { if (mana >= 1) { fireBullet(this); mana -= 1; updateHUD(); lastFired = time + 150; } else { if (time > lastFired + 500) { sfx('noshot'); lastFired = time + 500; } } }
     enemies.children.each(e => {
-        if (e.getData('type') === 'miniboss' && e.active) {
-            e.angle += 2; // Xoay vòng
-        }
+        if (e.getData('type') === 'miniboss' && e.active) e.angle += 2;
+        if (e.getData('type') === 'normal' && e.active) e.angle += 1; // Thiên thạch xoay
     });
-
-    // CLEANUP
-    bullets.children.each(b => { if(b.y < -50) b.destroy(); });
-    enemyBullets.children.each(b => { if(b.y > config.height + 50) b.destroy(); });
+    bullets.children.each(b => { if(b.y < -50) b.destroy(); }); enemyBullets.children.each(b => { if(b.y > config.height + 50) b.destroy(); });
 }
 
 // --- CORE FUNCTIONS ---
-
-function fireBullet(scene) {
-    let b = scene.add.circle(player.x, player.y - 25, 5, 0xffff00);
-    scene.physics.add.existing(b);
-    bullets.add(b);
-    b.body.setVelocityY(-600);
-    sfx('shoot');
-}
-
+function fireBullet(scene) { let b = bullets.create(player.x, player.y - 30, 'bullet'); b.body.setVelocityY(-600); sfx('shoot'); }
 function startWave(scene, wave) {
-    currentWave = wave;
-    isWaveActive = true;
-    waveTimeRemaining = 30;
-    
-    scene.waveTextObj.setText('WAVE ' + wave);
-    scene.waveTextObj.setAlpha(1);
-    scene.tweens.add({targets: scene.waveTextObj, alpha: 0, duration: 2000, delay: 1000});
-
-    if (waveTimer) waveTimer.remove();
-    if (spawnTimer) spawnTimer.remove();
-
-    // Spawn Logic
-    let delay = wave === 3 ? 2000 : (wave === 2 ? 800 : 1000);
-    spawnTimer = scene.time.addEvent({ delay: delay, callback: () => spawnEnemy(scene), loop: true });
-
-    // Timer
-    waveTimer = scene.time.addEvent({
-        delay: 1000, repeat: 30,
-        callback: () => {
-            if(!isPaused) waveTimeRemaining--;
-            if(waveTimeRemaining <= 0) endWave(scene);
-        }
-    });
-
-    // Special Mobs
-    if(wave <= 2) scene.time.delayedCall(15000, () => spawnMob(scene, 'miniboss'));
-    if(wave === 3) scene.time.delayedCall(2000, () => spawnMob(scene, 'boss'));
+    currentWave = wave; isWaveActive = true; waveTimeRemaining = 30; scene.waveTextObj.setText('WAVE ' + wave).setAlpha(1); scene.tweens.add({targets: scene.waveTextObj, alpha: 0, duration: 2000, delay: 1000});
+    if (waveTimer) waveTimer.remove(); if (spawnTimer) spawnTimer.remove();
+    let delay = wave === 3 ? 2000 : (wave === 2 ? 800 : 1000); spawnTimer = scene.time.addEvent({ delay: delay, callback: () => spawnEnemy(scene), loop: true });
+    waveTimer = scene.time.addEvent({ delay: 1000, repeat: 30, callback: () => { if(!isPaused) waveTimeRemaining--; if(waveTimeRemaining <= 0) endWave(scene); } });
+    if(wave <= 2) scene.time.delayedCall(15000, () => spawnMob(scene, 'miniboss')); if(wave === 3) scene.time.delayedCall(2000, () => spawnMob(scene, 'boss'));
 }
-
-function endWave(scene) {
-    if(currentWave < 3) startWave(scene, currentWave + 1);
-}
-
-function spawnEnemy(scene) {
-    if(currentWave === 3) return; 
-    spawnMob(scene, 'normal');
-}
-
+function endWave(scene) { if(currentWave < 3) startWave(scene, currentWave + 1); }
+function spawnEnemy(scene) { if(currentWave === 3) return; spawnMob(scene, 'normal'); }
 function spawnMob(scene, type) {
-    let x = Phaser.Math.Between(30, config.width - 30);
-    let mob;
-
+    let x = Phaser.Math.Between(50, config.width - 50); let mob;
     if (type === 'normal') {
-        mob = scene.add.rectangle(x, -50, 30, 30, 0x00ffff);
+        mob = enemies.create(x, -50, 'meteor'); // Sử dụng texture thiên thạch
         setupMob(scene, mob, 10, 100, 'normal');
-    } 
-    else if (type === 'miniboss') {
-        mob = scene.add.rectangle(config.width/2, -60, 50, 50, 0xffff00);
+    } else if (type === 'miniboss') {
+        mob = enemies.create(config.width/2, -60, 'ufoBlue'); // Sử dụng texture UFO Xanh
         setupMob(scene, mob, 50, 50, 'miniboss');
-        // Mini-boss shooting logic
-        scene.time.addEvent({
-            delay: 1500, loop: true,
-            callback: () => {
-                if(!mob.active || isPaused) return;
-                let b = scene.add.circle(mob.x, mob.y, 4, 0xffaa00);
-                scene.physics.add.existing(b);
-                enemyBullets.add(b);
-                scene.physics.moveToObject(b, player, 150);
-                b.setData('dmg', 0.5); // Damage nhỏ
-            }
-        });
-    }
-    else if (type === 'boss') {
-        mob = scene.add.rectangle(config.width/2, -100, 100, 100, 0xff0000);
+        scene.time.addEvent({ delay: 1500, loop: true, callback: () => { if(!mob.active || isPaused) return; let b = enemyBullets.create(mob.x, mob.y, 'enemyBullet'); scene.physics.moveToObject(b, player, 150); b.setData('dmg', 0.5); } });
+    } else if (type === 'boss') {
+        mob = enemies.create(config.width/2, -100, 'ufoRed'); // Sử dụng texture UFO Đỏ
         setupMob(scene, mob, 200, 20, 'boss');
-        mob.setRotation(Math.PI / 4);
-        scene.time.addEvent({
-            delay: 1000, loop: true,
-            callback: () => {
-                if(!mob.active || isPaused) return;
-                let b = scene.add.circle(mob.x, mob.y, 8, 0xff0000);
-                scene.physics.add.existing(b);
-                enemyBullets.add(b);
-                scene.physics.moveToObject(b, player, 200);
-                b.setData('dmg', 20); // Boss bắn đau
-            }
-        });
+        scene.time.addEvent({ delay: 1000, loop: true, callback: () => { if(!mob.active || isPaused) return; let b = enemyBullets.create(mob.x, mob.y, 'bossBullet'); scene.physics.moveToObject(b, player, 200); b.setData('dmg', 20); } });
     }
 }
-
-function setupMob(scene, mob, hp, speed, type) {
-    scene.physics.add.existing(mob);
-    enemies.add(mob);
-    mob.setData('hp', hp);
-    mob.setData('type', type);
-    mob.body.setVelocityY(speed);
-}
+function setupMob(scene, mob, hp, speed, type) { mob.setData('hp', hp); mob.setData('type', type); mob.body.setVelocityY(speed); }
 
 // --- COLLISION & DAMAGE ---
-
 function hitEnemy(bullet, enemy) {
-    bullet.destroy();
-    let curHp = enemy.getData('hp') - 10;
-    enemy.setData('hp', curHp);
-    
-    if (curHp > 0) {
-        sfx('hit');
-        enemy.setAlpha(0.5);
-        enemy.scene.time.delayedCall(50, () => enemy.setAlpha(1));
-    } else {
-        sfx('explode');
-        createExplosion(enemy.scene, enemy.x, enemy.y, enemy.fillColor);
-        enemy.destroy();
-        score += 10;
-        updateHUD();
-        if(enemy.width > 80) winGame(enemy.scene);
-    }
+    bullet.destroy(); let curHp = enemy.getData('hp') - 10; enemy.setData('hp', curHp);
+    if (curHp > 0) { sfx('hit'); enemy.setAlpha(0.5); enemy.scene.time.delayedCall(50, () => enemy.setAlpha(1)); } else { sfx('explode'); createExplosion(enemy.scene, enemy.x, enemy.y, enemy.getData('type')==='ufoRed'?0xff0000:(enemy.getData('type')==='ufoBlue'?0x00ffff:0x8B4513)); enemy.destroy(); score += 10; updateHUD(); if(enemy.width > 80) winGame(enemy.scene); }
 }
-
-function playerHitMob(player, mob) {
-    takeDamage(10); // Đụng quái mất 10 máu
-    if (!isInvincible) {
-        sfx('explode');
-        createExplosion(player.scene, mob.x, mob.y, mob.fillColor);
-        mob.destroy();
-    }
-}
-
-function playerHitBullet(player, bullet) {
-    let dmg = bullet.getData('dmg') || 10;
-    bullet.destroy();
-    takeDamage(dmg);
-}
-
+function playerHitMob(player, mob) { takeDamage(10); if (!isInvincible) { sfx('explode'); createExplosion(player.scene, mob.x, mob.y, mob.getData('type')==='ufoRed'?0xff0000:(mob.getData('type')==='ufoBlue'?0x00ffff:0x8B4513)); mob.destroy(); } }
+function playerHitBullet(player, bullet) { let dmg = bullet.getData('dmg') || 10; bullet.destroy(); takeDamage(dmg); }
 function takeDamage(amount) {
-    if (isInvincible || !player.active) return;
-    
-    hp -= amount;
-    if (hp < 0) hp = 0;
-    updateHUD();
-    sfx('hit');
-
-    if (hp <= 0) {
-        gameOver();
-    } else {
-        // Kích hoạt I-Frame (Bất tử tạm thời)
-        isInvincible = true;
-        // Hiệu ứng nhấp nháy
-        let tween = gameScene.tweens.add({
-            targets: player, alpha: 0.2, duration: 100, yoyo: true, repeat: 5,
-            onComplete: () => {
-                player.setAlpha(1);
-                isInvincible = false;
-            }
-        });
-    }
+    if (isInvincible || !player.active) return; hp -= amount; if (hp < 0) hp = 0; updateHUD(); sfx('hit');
+    if (hp <= 0) { gameOver(); } else { isInvincible = true; gameScene.tweens.add({ targets: player, alpha: 0.2, duration: 100, yoyo: true, repeat: 5, onComplete: () => { player.setAlpha(1); isInvincible = false; } }); }
 }
-
-function updateHUD() {
-    document.getElementById('hp-text').innerText = Math.ceil(hp);
-    document.getElementById('mana-text').innerText = Math.floor(mana);
-    document.getElementById('score-display').innerText = 'SCORE: ' + score;
-    
-    document.getElementById('hp-bar').style.width = hp + '%';
-    document.getElementById('mana-bar').style.width = mana + '%';
-}
-
-function createExplosion(scene, x, y, color) {
-    for (let i = 0; i < 20; i++) {
-        let part = scene.add.rectangle(x, y, 4, 4, color);
-        scene.physics.add.existing(part);
-        let angle = Phaser.Math.Between(0, 360);
-        let speed = Phaser.Math.Between(50, 200);
-        scene.physics.velocityFromAngle(angle, speed, part.body.velocity);
-        scene.tweens.add({ targets: part, alpha: 0, duration: 500, onComplete: () => part.destroy() });
-    }
-}
+function updateHUD() { document.getElementById('hp-text').innerText = Math.ceil(hp); document.getElementById('mana-text').innerText = Math.floor(mana); document.getElementById('score-display').innerText = 'SCORE: ' + score; document.getElementById('hp-bar').style.width = hp + '%'; document.getElementById('mana-bar').style.width = mana + '%'; }
+function createExplosion(scene, x, y, color) { for (let i = 0; i < 20; i++) { let part = scene.add.rectangle(x, y, 4, 4, color); scene.physics.add.existing(part); let angle = Phaser.Math.Between(0, 360); let speed = Phaser.Math.Between(50, 200); scene.physics.velocityFromAngle(angle, speed, part.body.velocity); scene.tweens.add({ targets: part, alpha: 0, duration: 500, onComplete: () => part.destroy() }); } }
 
 // --- PAUSE & GAME STATES ---
-
-function togglePause() {
-    if (!gameStarted) return;
-    isPaused = !isPaused;
-    let menu = document.getElementById('pause-menu');
-    
-    if (isPaused) {
-        game.scene.scenes[0].physics.pause();
-        menu.style.display = 'flex';
-    } else {
-        game.scene.scenes[0].physics.resume();
-        menu.style.display = 'none';
-    }
-}
-
-function restartCurrentWave() {
-    // Reset đơn giản: Xóa quái, hồi full máu/mana, chạy lại wave hiện tại
-    enemies.clear(true, true);
-    enemyBullets.clear(true, true);
-    hp = 100; mana = 100; updateHUD();
-    togglePause();
-    startWave(gameScene, currentWave);
-}
-
-function gameOver() {
-    player.setActive(false).setVisible(false);
-    sfx('explode');
-    createExplosion(gameScene, player.x, player.y, 0x00ff00);
-    
-    gameScene.waveTextObj.setText('GAME OVER').setAlpha(1);
-    // Tự động hiện menu sau 2s
-    setTimeout(() => {
-        isPaused = true;
-        document.getElementById('pause-menu').style.display = 'flex';
-    }, 2000);
-}
-
-function winGame(scene) {
-    scene.physics.pause();
-    scene.waveTextObj.setText('YOU WIN!').setAlpha(1);
-}
-
+function togglePause() { if (!gameStarted) return; isPaused = !isPaused; let menu = document.getElementById('pause-menu'); if (isPaused) { game.scene.scenes[0].physics.pause(); menu.style.display = 'flex'; } else { game.scene.scenes[0].physics.resume(); menu.style.display = 'none'; } }
+function restartCurrentWave() { enemies.clear(true, true); enemyBullets.clear(true, true); hp = 100; mana = 100; updateHUD(); togglePause(); startWave(gameScene, currentWave); }
+function gameOver() { player.setActive(false).setVisible(false); sfx('explode'); createExplosion(gameScene, player.x, player.y, 0x00ff00); gameScene.waveTextObj.setText('GAME OVER').setAlpha(1); setTimeout(() => { isPaused = true; document.getElementById('pause-menu').style.display = 'flex'; }, 2000); }
+function winGame(scene) { scene.physics.pause(); scene.waveTextObj.setText('YOU WIN!').setAlpha(1); }
 </script>
 </body>
 </html>
