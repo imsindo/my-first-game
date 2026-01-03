@@ -98,4 +98,201 @@ function preload() {
 
 function create() {
     // Kích hoạt âm thanh khi chạm lần đầu
-    this.input.once('pointerdown',
+    this.input.once('pointerdown', () => initAudio());
+
+    // Setup Groups
+    bullets = this.physics.add.group();
+    enemyBullets = this.physics.add.group();
+    enemies = this.physics.add.group();
+
+    // Player (Tam giác xanh)
+    player = this.add.triangle(config.width/2, config.height-80, 0, -20, -15, 15, 15, 15, 0x00ff00);
+    this.physics.add.existing(player);
+    player.body.setCollideWorldBounds(true);
+    player.body.setImmovable(true);
+    player.body.setSize(20, 20);
+
+    // UI
+    scoreText = this.add.text(10, 10, 'SCORE: 0', { fontSize: '18px', fill: '#fff' }).setDepth(100);
+    waveText = this.add.text(config.width/2, 20, 'READY?', { fontSize: '24px', fill: '#ffff00', fontStyle: 'bold' }).setOrigin(0.5).setDepth(100);
+    
+    // Controls (Touch to move)
+    this.input.on('pointermove', (pointer) => {
+        if(player.active) player.x = pointer.x;
+    });
+
+    // Collisions
+    this.physics.add.overlap(bullets, enemies, hitEnemy, null, this);
+    this.physics.add.overlap(player, enemies, playerHit, null, this);
+    this.physics.add.overlap(player, enemyBullets, playerHit, null, this);
+
+    // Start Game
+    this.time.delayedCall(1000, () => startWave(this, 1));
+}
+
+function update(time, delta) {
+    if(!player.active) return;
+
+    // Auto Fire (Mobile style)
+    if (this.input.activePointer.isDown && time > lastFired && isWaveActive) {
+        let b = bullets.create(player.x, player.y - 25, 'particle');
+        b.setScale(2).setTint(0xffff00);
+        b.body.setVelocityY(-600);
+        playSound('shoot');
+        lastFired = time + 200; // Tốc độ bắn
+    }
+
+    // Bullet Cleanup
+    bullets.children.each(b => { if(b.y < -50) b.destroy(); });
+    enemyBullets.children.each(b => { if(b.y > config.height + 50) b.destroy(); });
+}
+
+// --- GAME LOGIC ---
+
+function startWave(scene, wave) {
+    currentWave = wave;
+    isWaveActive = true;
+    waveTimeRemaining = 30;
+    
+    // Reset Timer
+    if (waveTimerEvent) waveTimerEvent.remove();
+    if (spawnTimer) spawnTimer.remove();
+
+    waveText.setText('WAVE ' + wave);
+    scene.tweens.add({targets: waveText, alpha: 0, duration: 2000, delay: 1000});
+
+    // Wave Config
+    let spawnDelay = 1000;
+    if(wave === 2) spawnDelay = 800;
+    if(wave === 3) spawnDelay = 2000; // Chậm lại để Boss ra
+
+    // Spawn Loop
+    spawnTimer = scene.time.addEvent({
+        delay: spawnDelay,
+        callback: () => spawnEnemy(scene),
+        loop: true
+    });
+
+    // Wave Timer (30s)
+    waveTimerEvent = scene.time.addEvent({
+        delay: 1000,
+        repeat: 30,
+        callback: () => {
+            waveTimeRemaining--;
+            if(waveTimeRemaining <= 0) endWave(scene);
+        }
+    });
+
+    // Boss Triggers
+    if(wave === 1 || wave === 2) {
+        scene.time.delayedCall(15000, () => spawnMob(scene, 'miniboss'));
+    }
+    if(wave === 3) {
+        scene.time.delayedCall(2000, () => spawnMob(scene, 'boss'));
+    }
+}
+
+function endWave(scene) {
+    if(currentWave < 3) {
+        scene.add.text(config.width/2, config.height/2, 'WAVE COMPLETE', {fontSize: '30px', fill:'#0f0'}).setOrigin(0.5);
+        scene.time.delayedCall(3000, () => location.reload()); // Demo: Reload game (thực tế sẽ qua wave sau)
+        // Logic thực tế: startWave(scene, currentWave + 1);
+        startWave(scene, currentWave + 1);
+    }
+}
+
+function spawnEnemy(scene) {
+    if(currentWave === 3) return; // Wave 3 chỉ có Boss
+    spawnMob(scene, 'normal');
+}
+
+function spawnMob(scene, type) {
+    let x = Phaser.Math.Between(30, config.width - 30);
+    let mob;
+
+    if (type === 'normal') {
+        mob = scene.add.rectangle(x, -50, 30, 30, 0x00ffff);
+        setupMob(scene, mob, 10, 100);
+    } 
+    else if (type === 'miniboss') {
+        mob = scene.add.rectangle(config.width/2, -60, 60, 60, 0xffff00);
+        setupMob(scene, mob, 50, 50);
+        scene.tweens.add({targets: mob, angle: 360, duration: 2000, repeat: -1});
+    }
+    else if (type === 'boss') {
+        mob = scene.add.rectangle(config.width/2, -100, 100, 100, 0xff0000);
+        setupMob(scene, mob, 200, 20);
+        mob.setRotation(Math.PI / 4); // Hình thoi
+        
+        // Boss Logic: Bắn đạn
+        scene.time.addEvent({
+            delay: 1000, loop: true,
+            callback: () => {
+                if(!mob.active) return;
+                let b = enemyBullets.create(mob.x, mob.y, 'particle').setScale(3).setTint(0xff0000);
+                scene.physics.moveToObject(b, player, 200);
+            }
+        });
+    }
+}
+
+function setupMob(scene, mob, hp, speed) {
+    scene.physics.add.existing(mob);
+    enemies.add(mob);
+    mob.setData('hp', hp);
+    mob.body.setVelocityY(speed);
+}
+
+function hitEnemy(bullet, enemy) {
+    bullet.destroy();
+    playSound('hit');
+
+    let hp = enemy.getData('hp') - 10;
+    enemy.setData('hp', hp);
+
+    // Hiệu ứng nhấp nháy
+    enemy.setAlpha(0.5);
+    enemy.scene.time.delayedCall(50, () => enemy.setAlpha(1));
+
+    if(hp <= 0) {
+        playSound('explode');
+        createExplosion(enemy.scene, enemy.x, enemy.y, enemy.fillColor);
+        enemy.destroy();
+        score += 10;
+        scoreText.setText('SCORE: ' + score);
+        
+        if(enemy.width > 80) { // Boss chết
+             let winText = enemy.scene.add.text(config.width/2, config.height/2, 'YOU WIN!', {fontSize:'50px', color:'#0f0'}).setOrigin(0.5);
+             enemy.scene.physics.pause();
+        }
+    }
+}
+
+function createExplosion(scene, x, y, color) {
+    // Tạo 20 hạt nổ
+    for(let i=0; i<20; i++) {
+        let p = scene.add.rectangle(x, y, 4, 4, color);
+        scene.physics.add.existing(p);
+        p.body.setVelocity(Phaser.Math.Between(-150, 150), Phaser.Math.Between(-150, 150));
+        scene.tweens.add({
+            targets: p, alpha: 0, duration: 500,
+            onComplete: () => p.destroy()
+        });
+    }
+}
+
+function playerHit(player, obj) {
+    obj.destroy();
+    playSound('explode');
+    createExplosion(player.scene, player.x, player.y, 0x00ff00);
+    player.setActive(false).setVisible(false);
+    
+    player.scene.add.text(config.width/2, config.height/2, 'GAME OVER', {fontSize:'40px', color:'#f00'}).setOrigin(0.5);
+    player.scene.add.text(config.width/2, config.height/2 + 50, 'Tap to Restart', {fontSize:'20px'}).setOrigin(0.5);
+    
+    player.scene.input.once('pointerdown', () => location.reload());
+}
+
+</script>
+</body>
+</html>
