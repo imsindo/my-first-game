@@ -1,89 +1,5 @@
 <!DOCTYPE html>
 <html lang="vi">
-    // --- THÊM VÀO ĐẦU PHẦN SCRIPT ---
-const AudioContext = window.AudioContext || window.webkitAudioContext;
-const audioCtx = new AudioContext();
-
-// Hàm tạo âm thanh tổng hợp (Không cần file mp3)
-function playSynthSound(freq, type, duration, vol) {
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + duration);
-    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + duration);
-}
-
-// --- TRONG PHẦN CREATE() CỦA PHASER ---
-// Khởi tạo hệ thống hạt (Particles) cho vụ nổ
-const particles = this.add.particles(0, 0, null, {
-    speed: { min: -100, max: 100 },
-    angle: { min: 0, max: 360 },
-    scale: { start: 1, end: 0 },
-    lifespan: 500,
-    gravityY: 0,
-    active: false
-});
-
-// --- CẬP NHẬT CÁC HÀM LOGIC ---
-
-function fireBullet(scene) {
-    let bullet = bullets.get(player.x, player.y - 20);
-    if (bullet) {
-        bullet.setActive(true).setVisible(true);
-        bullet.body.setVelocityY(-500);
-        // Âm thanh bắn đạn
-        playSynthSound(800, 'square', 0.1, 0.1); 
-    }
-}
-
-function hitEnemy(bullet, enemy) {
-    bullet.setActive(false).setVisible(false);
-    bullets.killAndHide(bullet);
-
-    let currentHp = enemy.getData('hp');
-    currentHp -= 10;
-
-    if (currentHp <= 0) {
-        // Kiểm tra nếu là Mini-boss hoặc Boss dựa trên kích thước
-        if (enemy.width > 50) {
-            // Hiệu ứng nổ lớn
-            particles.setConfig({
-                x: enemy.x, y: enemy.y,
-                tint: enemy.fillColor,
-                quantity: 20
-            });
-            particles.explode();
-            playSynthSound(100, 'sawtooth', 0.5, 0.3); // Boom!
-        } else {
-            // Quái nhỏ chết
-            playSynthSound(400, 'sine', 0.05, 0.1); // Pop!
-        }
-        enemy.destroy();
-        score += 10;
-        scoreText.setText('Score: ' + score);
-    } else {
-        enemy.setData('hp', currentHp);
-        this.tweens.add({ targets: enemy, alpha: 0.5, duration: 50, yoyo: true });
-    }
-}
-
-// Logic cho âm thanh Slash khi di chuyển
-let lastX = 0;
-function handleMove(pointer) {
-    let diff = Math.abs(pointer.x - lastX);
-    if (diff > 50) { // Nếu lướt tay cực nhanh
-        playSynthSound(1200, 'triangle', 0.1, 0.05); // Slash sound
-    }
-    lastX = pointer.x;
-    player.x = pointer.x;
-}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -411,4 +327,5 @@ function gameWin(scene) {
 </script>
 </body>
 </html>
+
 
