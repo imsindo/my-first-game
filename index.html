@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Binh Game - Dodge</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style> body { margin: 0; padding: 0; background: #000; overflow: hidden; } </style>
+</head>
+<body>
+<script>
+const config = {
+    type: Phaser.AUTO,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    physics: { default: 'arcade', arcade: { gravity: { y: 300 } } },
+    scene: { preload: preload, create: create, update: update },
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }
+};
+
+let player, enemies, score = 0, scoreText, highScore;
+const game = new Phaser.Game(config);
+
+function preload() {} // Không dùng ảnh để tránh lỗi load, dùng Graphics
+
+function create() {
+    highScore = localStorage.getItem('highScore') || 0;
+    
+    // Tạo nhân vật (Khối vuông xanh)
+    player = this.add.rectangle(config.width/2, config.height - 50, 40, 40, 0x00ff00);
+    this.physics.add.existing(player);
+    player.body.setCollideWorldBounds(true);
+    player.body.setAllowGravity(false);
+
+    enemies = this.physics.add.group();
+    
+    // Spawn kẻ địch mỗi 1 giây
+    this.time.addEvent({ delay: 800, callback: spawnEnemy, callbackScope: this, loop: true });
+
+    scoreText = this.add.text(16, 16, 'Score: 0\nBest: ' + highScore, { fontSize: '20px', fill: '#fff' });
+
+    // Xử lý va chạm
+    this.physics.add.overlap(player, enemies, gameOver, null, this);
+
+    // Điều khiển cảm ứng (Touch)
+    this.input.on('pointermove', (pointer) => {
+        player.x = pointer.x;
+    });
+}
+
+function spawnEnemy() {
+    let x = Phaser.Math.Between(0, config.width);
+    let enemy = this.add.rectangle(x, 0, 30, 30, 0xff0000);
+    enemies.add(enemy);
+    enemy.body.setVelocityY(200 + score); // Càng về sau càng nhanh
+    score += 10;
+    scoreText.setText('Score: ' + score + '\nBest: ' + highScore);
+}
+
+function gameOver() {
+    if (score > highScore) localStorage.setItem('highScore', score);
+    alert("Game Over! Điểm của bạn: " + score);
+    location.reload();
+}
+
+function update() {}
+</script>
+</body>
+</html>
