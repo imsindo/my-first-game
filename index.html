@@ -3,329 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Triangle Space Shooter - 3 Waves</title>
+    <title>Space Shooter: Final Stand</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
-    <style> body { margin: 0; padding: 0; background: #000; overflow: hidden; } </style>
+    <style> 
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; user-select: none; -webkit-user-select: none; } 
+    </style>
 </head>
 <body>
 <script>
+// --- 1. HỆ THỐNG ÂM THANH (WEB AUDIO API) ---
+// Tự sinh âm thanh để không cần tải file mp3, đảm bảo chạy 100%
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+let isAudioEnabled = false;
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new AudioContext();
+        audioCtx.resume().then(() => {
+            isAudioEnabled = true;
+            console.log("Audio System: ON");
+        });
+    }
+}
+
+function playSound(type) {
+    if (!isAudioEnabled || !audioCtx) return;
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const now = audioCtx.currentTime;
+
+    if (type === 'shoot') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    } 
+    else if (type === 'hit') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+    }
+    else if (type === 'explode') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.3);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+    }
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+}
+
+// --- 2. GAME CONFIG ---
 const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
-    physics: { default: 'arcade', arcade: { debug: false, gravity: { y: 0 } } }, // Tắt trọng lực global
+    backgroundColor: '#000000',
+    physics: { default: 'arcade', arcade: { debug: false, gravity: { y: 0 } } },
     scene: { preload: preload, create: create, update: update },
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }
 };
 
-// --- GLOBALS ---
+// --- VARIABLES ---
 let player, bullets, enemies, enemyBullets;
-let cursors, fireButton;
-let score = 0, scoreText;
-let waveText, timerText;
+let score = 0, scoreText, waveText, hpText;
 let currentWave = 1;
 let waveTimerEvent;
 let waveTimeRemaining = 30;
 let isWaveActive = false;
 let spawnTimer;
-let bossActive = false;
-
-const BULLET_DMG = 10;
-const ENEMY_HP = 10;
-const MINIBOSS_HP = 50;
-const BOSS_HP = 100;
+let lastFired = 0;
 
 const game = new Phaser.Game(config);
 
 function preload() {
-    // Vẫn không dùng ảnh để đảm bảo chạy ngay lập tức
+    // Tạo texture cho đạn và hạt nổ bằng code (tránh lỗi load ảnh)
+    let g = this.make.graphics({x:0, y:0, add:false});
+    g.fillStyle(0xffffff);
+    g.fillRect(0,0,4,4);
+    g.generateTexture('particle', 4, 4);
 }
 
 function create() {
-    // --- SETUP GROUPS ---
-    bullets = this.physics.add.group({ defaultKey: null, maxSize: 30 });
-    enemies = this.physics.add.group();
-    
-    // --- SETUP PLAYER (Hình Tam Giác) ---
-    // Vẽ một tam giác hướng lên: đỉnh ở (0, -20), đáy trái (-15, 15), đáy phải (15, 15)
-    player = this.add.triangle(config.width / 2, config.height - 50, 0, -20, -15, 15, 15, 15, 0x00ff00);
-    this.physics.add.existing(player);
-    player.body.setCollideWorldBounds(true);
-    player.body.setImmovable(true);
-    // Tạo một hitbox hình chữ nhật nhỏ hơn cho tam giác để né đạn chuẩn hơn
-    player.body.setSize(20, 20); 
-    player.body.setOffset(-10, -5);
-
-    // --- INPUT ---
-    cursors = this.input.keyboard.createCursorKeys();
-    fireButton = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    
-    // Điều khiển cảm ứng (Chạm để di chuyển, tự bắn)
-    this.input.on('pointermove', (pointer) => {
-        if(player.active) player.x = pointer.x;
-    }, this);
-
-    // --- UI ---
-    scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '18px', fill: '#fff' }).setDepth(10);
-    waveText = this.add.text(config.width/2, 10, 'Wave: 1', { fontSize: '18px', fill: '#ffff00' }).setOrigin(0.5).setDepth(10);
-    timerText = this.add.text(config.width - 10, 10, 'Time: 30', { fontSize: '18px', fill: '#fff' }).setOrigin(1, 0).setDepth(10);
-
-    // --- COLLISIONS ---
-    this.physics.add.overlap(bullets, enemies, hitEnemy, null, this);
-    this.physics.add.overlap(player, enemies, playerHit, null, this);
-
-    // Bắt đầu game sau 2 giây chuẩn bị
-    this.time.delayedCall(2000, startWave, [1], this);
-    showMessage(this, "GET READY!", 2000);
-}
-
-function update(time, delta) {
-    if (!isWaveActive || !player.active) return;
-
-    // PC Movement
-    player.body.setVelocityX(0);
-    if (cursors.left.isDown) player.body.setVelocityX(-300);
-    else if (cursors.right.isDown) player.body.setVelocityX(300);
-
-    // PC Shooting
-    if (Phaser.Input.Keyboard.JustDown(fireButton)) {
-        fireBullet(this);
-    }
-    // Mobile Auto-fire (bắn mỗi 0.3s nếu đang chạm màn hình)
-    if (this.input.activePointer.isDown && time > lastFired) {
-        fireBullet(this);
-        lastFired = time + 300;
-    }
-
-    // Update UI Timer
-    if (waveTimerEvent) {
-        waveTimeRemaining = Math.ceil(waveTimerEvent.getRemainingSeconds());
-        timerText.setText('Time: ' + waveTimeRemaining);
-    }
-
-    // Recycle bullets
-    bullets.children.each(b => {
-        if (b.active && b.y < 0) bullets.killAndHide(b);
-    });
-
-    // Enemy Movement Pattern (Di chuyển kiểu bầy đàn đơn giản - lượn sóng xuống)
-    enemies.children.each(enemy => {
-        if (enemy.active) {
-            // Di chuyển xuống
-            enemy.y += enemy.getData('speedY') * (delta/1000);
-            // Di chuyển ngang lượn sóng (Sin wave)
-            enemy.x += Math.sin(enemy.y / 50) * enemy.getData('speedX') * (delta/1000);
-
-            if (enemy.y > config.height + 50) {
-                enemy.destroy(); // Xóa khi ra khỏi màn hình dưới
-            }
-        }
-    });
-}
-let lastFired = 0;
-
-// --- GAME LOGIC FUNCTIONS ---
-
-function fireBullet(scene) {
-    let bullet = bullets.get(player.x, player.y - 20);
-    if (bullet) {
-        bullet.setActive(true).setVisible(true);
-        // Vẽ đạn là khối vuông nhỏ màu vàng
-        if (!bullet.body) {
-            scene.add.rectangle(0,0, 8, 15, 0xffff00);
-            scene.physics.add.existing(bullet);
-        } else {
-             // Nếu tái sử dụng bullet cũ, đảm bảo nó có texture
-             if(bullet.width === 0) {
-                 bullet.setSize(8, 15); bullet.setFillStyle(0xffff00);
-             }
-        }
-        bullet.body.setVelocityY(-500);
-    }
-}
-
-function startWave(waveNum) {
-    currentWave = waveNum;
-    waveText.setText('Wave: ' + currentWave);
-    isWaveActive = true;
-    bossActive = false;
-    waveTimeRemaining = 30;
-
-    // Hủy các timer cũ nếu có
-    if (waveTimerEvent) waveTimerEvent.remove();
-    if (spawnTimer) spawnTimer.remove();
-    // Xóa hết quái cũ
-    enemies.clear(true, true);
-
-    // Timer kết thúc wave sau 30s
-    waveTimerEvent = this.time.delayedCall(30000, endWave, [], this);
-
-    // Cấu hình spawn cho từng wave
-    let spawnDelay = 1000; // Mặc định Wave 1 spawn mỗi 1s
-    if (currentWave === 2) spawnDelay = 800; // Wave 2 nhanh hơn
-    if (currentWave === 3) spawnDelay = 1500; // Wave 3 chậm lại để nhường Boss
-
-    // Spawn quái thường liên tục
-    spawnTimer = this.time.addEvent({
-        delay: spawnDelay,
-        callback: spawnEnemy,
-        callbackScope: this,
-        loop: true
-    });
-
-    // Spawn Mini-boss ở giây thứ 15 của Wave 1 và 2
-    if (currentWave === 1 || currentWave === 2) {
-        this.time.delayedCall(15000, spawnMiniBoss, [], this);
-    }
-    
-    // Spawn Final Boss ngay đầu Wave 3
-    if (currentWave === 3) {
-        showMessage(this, "FINAL BOSS APPROACHING!", 3000, 0xff0000);
-        this.time.delayedCall(2000, spawnFinalBoss, [], this);
-    } else {
-        showMessage(this, "WAVE " + currentWave + " START!", 2000);
-    }
-}
-
-function endWave() {
-    isWaveActive = false;
-    if (spawnTimer) spawnTimer.remove(); // Ngừng spawn quái
-
-    if (currentWave < 3) {
-        showMessage(this, "WAVE COMPLETE!", 3000);
-        // Nghỉ 3s rồi qua wave tiếp theo
-        this.time.delayedCall(3000, startWave, [currentWave + 1], this);
-    } else {
-        // Hết Wave 3, kiểm tra xem Boss chết chưa
-        if (enemies.countActive() === 0) {
-             gameWin(this);
-        } else {
-            // Nếu hết giờ mà boss chưa chết, cho thêm chút thời gian hoặc chờ diệt hết
-            timerText.setText('Time: OVERTIME');
-            isWaveActive = true; // Cho phép bắn tiếp để diệt nốt quái
-        }
-    }
-}
-
-// --- SPAWN FUNCTIONS ---
-
-function spawnEnemy() {
-    if (!isWaveActive && currentWave !== 3) return;
-    let x = Phaser.Math.Between(30, config.width - 30);
-    // Quái vuông (Square): màu trắng hơi xanh
-    let enemy = this.add.rectangle(x, -30, 30, 30, 0xaaddff);
-    setupEnemy(this, enemy, ENEMY_HP, 100, 50); // HP 10, SpeedY 100, SpeedX 50
-}
-
-function spawnMiniBoss() {
-    if (!isWaveActive) return;
-    let x = config.width / 2;
-    // Mini-boss: Hình vuông màu vàng lớn hơn
-    let enemy = this.add.rectangle(x, -50, 60, 60, 0xffff00);
-    setupEnemy(this, enemy, MINIBOSS_HP, 50, 30); // HP 50, Chậm hơn
-    showMessage(this, "MINI-BOSS!", 2000, 0xffff00);
-}
-
-function spawnFinalBoss() {
-    bossActive = true;
-    let x = config.width / 2;
-    // Boss lớn: Hình vuông màu đỏ, xoay 45 độ để trông "bị cắt" (hình thoi)
-    let enemy = this.add.rectangle(x, -100, 120, 120, 0xff0000);
-    enemy.setRotation(Phaser.Math.DegToRad(45));
-    setupEnemy(this, enemy, BOSS_HP, 30, 20); // HP 100, Rất chậm
-}
-
-function setupEnemy(scene, enemy, hp, speedY, speedX) {
-    scene.physics.add.existing(enemy);
-    enemies.add(enemy);
-    // Lưu máu và tốc độ vào data của đối tượng
-    enemy.setData('hp', hp);
-    enemy.setData('maxHp', hp); // Lưu máu tối đa để (có thể) vẽ thanh máu sau này
-    enemy.setData('speedY', speedY);
-    enemy.setData('speedX', speedX);
-}
-
-// --- COMBAT LOGIC ---
-
-function hitEnemy(bullet, enemy) {
-    bullet.setActive(false).setVisible(false);
-    bullets.killAndHide(bullet);
-
-    let currentHp = enemy.getData('hp');
-    currentHp -= BULLET_DMG; // Mỗi viên trừ 10 máu
-
-    if (currentHp <= 0) {
-        // Quái chết
-        enemy.destroy();
-        score += 10 * currentWave; // Điểm tăng theo wave
-        scoreText.setText('Score: ' + score);
-
-        // Nếu đây là boss cuối và nó chết
-        if (currentWave === 3 && enemy.width > 100 && enemies.countActive() === 0) {
-             gameWin(this);
-        }
-
-    } else {
-        // Quái bị trúng đạn nhưng chưa chết
-        enemy.setData('hp', currentHp);
-        // Hiệu ứng nhấp nháy khi trúng đạn
-        this.tweens.add({
-            targets: enemy, alpha: 0.5, duration: 50, yoyo: true, repeat: 1
-        });
-    }
-}
-
-function playerHit(player, enemy) {
-    // Đơn giản hóa: Chạm là chết
-    enemy.destroy();
-    gameOver(this);
-}
-
-// --- GAME STATE HELPERS ---
-
-function showMessage(scene, text, duration, color = 0xffffff) {
-    let msg = scene.add.text(config.width/2, config.height/2, text, {
-        fontSize: '40px', fill: '#' + color.toString(16), stroke: '#000', strokeThickness: 6
-    }).setOrigin(0.5).setDepth(100);
-    scene.tweens.add({ targets: msg, alpha: 0, duration: duration, delay: 500, onComplete: () => msg.destroy() });
-}
-
-function gameOver(scene) {
-    isWaveActive = false;
-    player.setActive(false).setVisible(false);
-    if (waveTimerEvent) waveTimerEvent.remove();
-    if (spawnTimer) spawnTimer.remove();
-    
-    scene.add.text(config.width/2, config.height/2, 'GAME OVER\nScore: ' + score, {
-        fontSize: '50px', fill: '#ff0000', align: 'center', stroke: '#000', strokeThickness: 6
-    }).setOrigin(0.5).setDepth(100);
-
-    scene.add.text(config.width/2, config.height/2 + 100, 'Tap to Restart', {
-        fontSize: '30px', fill: '#fff'
-    }).setOrigin(0.5).setDepth(100);
-    
-    scene.input.once('pointerdown', () => location.reload());
-}
-
-function gameWin(scene) {
-    isWaveActive = false;
-    if (waveTimerEvent) waveTimerEvent.remove();
-    if (spawnTimer) spawnTimer.remove();
-    enemies.clear(true, true);
-
-    scene.add.text(config.width/2, config.height/2, 'MISSION COMPLETE!\nYOU SAVED THE GALAXY!', {
-        fontSize: '35px', fill: '#00ff00', align: 'center', stroke: '#000', strokeThickness: 6
-    }).setOrigin(0.5).setDepth(100);
-
-    scene.add.text(config.width/2, config.height/2 + 150, 'Final Score: ' + score + '\nTap to Play Again', {
-        fontSize: '25px', fill: '#fff', align: 'center'
-    }).setOrigin(0.5).setDepth(100);
-
-    scene.input.once('pointerdown', () => location.reload());
-}
-
-</script>
-</body>
-</html>
-
-
+    // Kích hoạt âm thanh khi chạm lần đầu
+    this.input.once('pointerdown',
